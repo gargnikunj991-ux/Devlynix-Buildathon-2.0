@@ -24,6 +24,7 @@ Thumbs.db
 # Environment / local config
 .env
 .env.*
+!.env.example
 application-local.properties
 
 # Build tool metadata

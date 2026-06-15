@@ -1,0 +1,35 @@
+# Maven / Java
+target/
+*.class
+*.jar
+*.war
+*.nar
+
+# IDEs
+.idea/
+.vscode/
+*.iml
+.classpath
+.project
+.settings/
+
+# Logs
+*.log
+logs/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Environment / local config
+.env
+.env.*
+!.env.example
+application-local.properties
+
+# Build tool metadata
+.mvn/wrapper/maven-wrapper.jar
+
+# Runtime uploads/temp
+tmp/
+temp/

@@ -1,0 +1,10 @@
+INSERT INTO skills (name) VALUES ('Java') ON CONFLICT (name) DO NOTHING;
+INSERT INTO skills (name) VALUES ('Spring Boot') ON CONFLICT (name) DO NOTHING;
+INSERT INTO skills (name) VALUES ('React') ON CONFLICT (name) DO NOTHING;
+INSERT INTO skills (name) VALUES ('UI/UX') ON CONFLICT (name) DO NOTHING;
+INSERT INTO skills (name) VALUES ('Figma') ON CONFLICT (name) DO NOTHING;
+INSERT INTO skills (name) VALUES ('PostgreSQL') ON CONFLICT (name) DO NOTHING;
+INSERT INTO skills (name) VALUES ('MongoDB') ON CONFLICT (name) DO NOTHING;
+INSERT INTO skills (name) VALUES ('Docker') ON CONFLICT (name) DO NOTHING;
+INSERT INTO skills (name) VALUES ('Machine Learning') ON CONFLICT (name) DO NOTHING;
+INSERT INTO skills (name) VALUES ('Flutter') ON CONFLICT (name) DO NOTHING;

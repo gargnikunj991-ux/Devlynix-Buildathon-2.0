@@ -79,7 +79,7 @@ public class SecurityConfig {
         return new BCryptPasswordEncoder();
     }
 
-  @Bean
+@Bean
 public CorsConfigurationSource corsConfigurationSource() {
     CorsConfiguration configuration = new CorsConfiguration();
 

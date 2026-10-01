@@ -5,6 +5,7 @@ import com.devtinder.dto.response.MessageResponse;
 import com.devtinder.service.ChatService;
 import jakarta.validation.Valid;
 import java.util.List;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -19,9 +20,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class ChatController {
 
     private final ChatService chatService;
+    private final SimpMessagingTemplate messagingTemplate;
 
-    public ChatController(ChatService chatService) {
+    public ChatController(ChatService chatService, SimpMessagingTemplate messagingTemplate) {
         this.chatService = chatService;
+        this.messagingTemplate = messagingTemplate;
     }
 
     @GetMapping("/{matchId}/messages")
@@ -38,6 +41,11 @@ public class ChatController {
             @PathVariable Long matchId,
             @Valid @RequestBody ChatMessageRequest request
     ) {
-        return chatService.sendMessage(userDetails.getUsername(), matchId, request.content());
+        MessageResponse response = chatService.sendMessage(userDetails.getUsername(), matchId, request.content());
+        try {
+            messagingTemplate.convertAndSend("/topic/matches/" + matchId, response);
+        } catch (Exception ignored) {
+        }
+        return response;
     }
 }

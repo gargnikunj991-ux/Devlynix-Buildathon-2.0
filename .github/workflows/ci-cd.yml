@@ -1,0 +1,67 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    name: Build & Test (Java 21)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Compile & Run Tests with Maven
+        run: mvn -B clean verify
+
+      - name: Verify Docker Container Build
+        run: |
+          docker build -t devtinder-backend:${{ github.sha }} .
+          echo "Docker container built successfully!"
+
+  deploy:
+    name: Continuous Deployment
+    needs: build-and-test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Trigger Deploy Hook (Render / Koyeb / Custom)
+        env:
+          DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+        run: |
+          if [ -n "$DEPLOY_HOOK_URL" ]; then
+            echo "Triggering deployment via deploy hook..."
+            curl -fsSL -X POST "$DEPLOY_HOOK_URL"
+            echo "Deploy hook successfully triggered!"
+          else
+            echo "No RENDER_DEPLOY_HOOK_URL secret found. Skipping automatic webhook deploy."
+            echo "Cloud providers with auto-deploy enabled (Render, Railway) will deploy automatically on push to main."
+          fi
+
+      - name: Deployment Summary
+        run: |
+          echo "### 🚀 CI/CD Pipeline Status" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Java Version:** 21 (Temurin)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Test Suite:** Passed (All tests clean)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Docker Image:** Verified & Ready" >> $GITHUB_STEP_SUMMARY

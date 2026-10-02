@@ -1,7 +1,7 @@
 # Devlynix — Roadmap, Architecture & Feature Gap Analysis
 
 **Date:** October 2026  
-**Document Version:** 1.0  
+**Document Version:** 1.1  
 **Backend:** Spring Boot 3.3.5 / Java 21 / Neon PostgreSQL / Render  
 **Frontend:** Next.js 16 (Turbopack) / React 19 / Tailwind CSS / Vercel  
 
@@ -35,6 +35,7 @@ A comprehensive audit of the backend codebase reveals several implemented backen
 
 | Feature Area | Backend Implementation | Frontend Client (`lib/api.ts`) | Frontend UI (`app/`) | Status / Gap |
 | :--- | :--- | :--- | :--- | :--- |
+| **Incoming Match Requests ("Who Liked You")** | Swipes are recorded in database (`Swipe` entity), but no dedicated query exists yet | Not implemented | Not implemented | 🔴 **Missing End-to-End**: Users cannot see who has sent them a match request; requires new backend endpoint + corner/drawer UI. |
 | **Skill-Based Discovery Filtering** | `GET /api/discover?skill={skill}` (`DiscoverController.java:31`) | `api.discover(token, skill)` supported | `app/dashboard/page.tsx` calls `api.discover(token)` with no parameter. | 🔴 **Missing UI**: No skill filter bar, tag selector, or dropdown to filter candidates by skill. |
 | **Profile Editing / Updating** | `PUT /api/profile/me` with `UpdateProfileRequest` (`name`, `bio`, `githubUrl`, `lookingFor`, `location`, `skills`) | `api.updateProfile(token, payload)` defined | Not referenced anywhere in `app/` or `components/`. | 🔴 **Missing UI**: Users cannot edit their profile, add/remove skills, or update bios after registration. |
 | **GitHub Profile Links** | `githubUrl` field in `User` entity, `RegisterRequest`, and `ProfileResponse` | Returned in `Profile` interface | Collected on `/register`, but never rendered as a clickable link on cards or matches. | 🟡 **Missing Link**: No "View GitHub Profile" button/link on developer discovery cards or chat header. |
@@ -46,19 +47,65 @@ A comprehensive audit of the backend codebase reveals several implemented backen
 
 ---
 
-## 3. Detailed Breakdown of Missing Frontend Features
+## 3. Detailed Breakdown & Architecture of Key Features
 
-### 3.1 Skill-Based Filtering in Discovery
+### 3.1 Incoming Match Requests Section ("Who Liked You" / Pending Invites)
+Currently, matching is a blind double-opt-in: Developer A likes Developer B, but Developer B has no idea Developer A is interested until Developer B happens to stumble upon Developer A in the general discovery feed and swipes right.
+
+#### Proposed UI Experience:
+- **Corner Notification / Drawer**: In the top-right corner of the Dashboard (or a persistent floating radar widget in the bottom corner), display an **`INCOMING SIGNALS [N]`** counter badge.
+- **Card Preview**: Clicking it expands a drawer or modal displaying developers who have already liked your profile.
+- **Immediate Match Action**: Each card includes:
+  - Developer's Name, GitHub link, Skills, and Hackathon Goals.
+  - **`[ACCEPT & MATCH]`** button: Calling the existing `POST /api/discover/swipe` (`direction: 'LIKE'`), instantly producing a match and opening the chat channel!
+  - **`[DECLINE]`** button: Calling `POST /api/discover/swipe` (`direction: 'PASS'`), quietly archiving the request.
+
+#### Required Backend Additions:
+1. **Repository Query (`SwipeRepository.java`)**:
+   ```java
+   @Query("""
+       select s.swiper
+       from Swipe s
+       where s.swiped.id = :userId
+         and s.direction = 'LIKE'
+         and s.swiper.id not in (
+             select s2.swiped.id
+             from Swipe s2
+             where s2.swiper.id = :userId
+         )
+       order by s.createdAt desc
+   """)
+   List<User> findIncomingPendingLikes(@Param("userId") Long userId);
+   ```
+2. **Controller Endpoint (`DiscoverController.java` or `MatchController.java`)**:
+   ```java
+   @GetMapping("/requests")
+   public List<ProfileResponse> getIncomingRequests(@AuthenticationPrincipal UserDetails userDetails) {
+       return matchService.getIncomingRequests(userDetails.getUsername());
+   }
+   ```
+3. **Frontend API Call (`lib/api.ts`)**:
+   ```typescript
+   getIncomingRequests(token: string) {
+       return request<Profile[]>("/matches/requests", {}, token);
+   }
+   ```
+
+---
+
+### 3.2 Skill-Based Filtering in Discovery
 - **Backend Capability**: `DiscoverService.java` filters candidates using:
   ```java
   filter(candidate -> required == null || lowerSkillSet(candidate).contains(required))
   ```
-  It can accept any skill query parameter (e.g. `GET /api/discover?skill=React`).
+  It already accepts any skill query parameter (`GET /api/discover?skill=React`).
 - **Frontend Opportunity**:
   - Add a retro skill filter bar above the discovery card grid in `app/dashboard/page.tsx`.
   - Let users click on their own skills or type in a search box to see only developers proficient in that stack (e.g., "Show me Rust devs", "Show me Next.js devs").
 
-### 3.2 Profile Editing (Settings / Edit Modal)
+---
+
+### 3.3 Profile Editing (Settings / Edit Modal)
 - **Backend Capability**: `PUT /api/profile/me` accepts partial or full updates for:
   - `name`: string (max 120)
   - `githubUrl`: string (max 260)
@@ -67,16 +114,20 @@ A comprehensive audit of the backend codebase reveals several implemented backen
   - `location`: string (max 120)
   - `skills`: string list
 - **Frontend Opportunity**:
-  - Add an "EDIT PROFILE" button next to "AUTHENTICATED DEVELOPER" in `app/dashboard/page.tsx`.
+  - Add an `[EDIT PROFILE]` button next to "AUTHENTICATED DEVELOPER" in `app/dashboard/page.tsx`.
   - Render an interactive `RetroModal` with fields to adjust bio, update hackathon goals, and add new skills as developers learn them.
 
-### 3.3 GitHub & Social Integration
+---
+
+### 3.4 GitHub & Social Integration
 - **Backend Capability**: `githubUrl` is stored in the `users` table and returned with every profile payload.
 - **Frontend Opportunity**:
   - Add an external link icon / button (`[GITHUB]`) on each card in `app/dashboard/page.tsx` and in the chat header in `app/matches/page.tsx`.
   - Auto-fetch the developer's GitHub avatar using `https://github.com/${username}.png` as an optional enhancement.
 
-### 3.4 Match Profile Drawer in Chat
+---
+
+### 3.5 Match Profile Drawer in Chat
 - **Backend Capability**: Full teammate metadata is provided in `MatchResponse.user`.
 - **Frontend Opportunity**:
   - In `app/matches/page.tsx`, add a collapsible sidebar or header popover showing:
@@ -87,9 +138,34 @@ A comprehensive audit of the backend codebase reveals several implemented backen
 
 ---
 
+### 3.6 Additional Backend Capabilities & System Extensions
+
+1. **Instant Match Alert Push (WebSocket)**:
+   - When User B swipes `LIKE` on User A, completing the match, backend can publish an instant notification to `/topic/user/{userAId}/notifications`:
+     ```json
+     { "type": "NEW_MATCH", "matchId": 2, "user": { "name": "Alex Rivers", ... } }
+     ```
+   - User A sees an instant cyberpunk celebratory modal: *"MATCH FOUND! YOU AND ALEX CAN NOW CHAT"*.
+
+2. **Unread Message Indicators (`isRead` / `readAt`)**:
+   - Currently, `Message` entity has `id`, `match`, `sender`, `content`, `sentAt`.
+   - Adding `isRead boolean default false` or `readAt Instant` enables unread message counter badges on the matches sidebar and push notifications.
+
+3. **Discovery Reset / Rewind ("Reset Passes")**:
+   - Currently, `UserRepository.findDiscoverableUsers` permanently excludes anyone the user has swiped on (whether `LIKE` or `PASS`).
+   - In small developer communities or fast-paced hackathons, a user may run out of profiles quickly.
+   - Adding `DELETE /api/discover/reset-passes` allows developers to wipe their negative passes (`direction = 'PASS'`) and re-evaluate developers they previously skipped.
+
+4. **Online Presence & Last Seen**:
+   - Hooking into Spring WebSocket `SessionConnectedEvent` and `SessionDisconnectEvent` allows tracking online status in-memory or Redis.
+   - Shows green status lights on online teammates in the matches sidebar.
+
+---
+
 ## 4. Strategic Roadmap & Next Steps
 
 ### Phase 1: High-Impact UI Completion (Immediate Priority)
+- [ ] **Incoming Match Requests Corner Widget**: Add an `INCOMING SIGNALS` badge and drawer showing developers who liked your profile, with instant Accept/Decline actions.
 - [ ] **Skill Filter Bar**: Add a chip-based skill selector on the Dashboard to filter discovery cards by technology.
 - [ ] **Edit Profile Modal**: Build a retro-styled modal on the Dashboard calling `api.updateProfile` to edit user info and skills.
 - [ ] **GitHub Links**: Display clickable GitHub badges on both discovery cards and active chat headers.

@@ -72,6 +72,16 @@ public class MatchService {
                 .toList();
     }
 
+    @Transactional(readOnly = true)
+    public List<ProfileResponse> getIncomingRequests(String email) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResourceNotFoundException("Profile not found"));
+
+        return swipeRepository.findIncomingLikes(user.getId()).stream()
+                .map(ProfileResponse::from)
+                .toList();
+    }
+
     Match getMatchForUser(Long matchId, User user) {
         Match match = matchRepository.findById(matchId)
                 .orElseThrow(() -> new ResourceNotFoundException("Match not found"));

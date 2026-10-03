@@ -2,6 +2,7 @@ package com.devtinder.controller;
 
 import com.devtinder.dto.response.MatchResponse;
 import com.devtinder.service.MatchService;
+import com.devtinder.dto.response.ProfileResponse;
 import java.util.List;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -23,4 +24,10 @@ public class MatchController {
     public List<MatchResponse> matches(@AuthenticationPrincipal UserDetails userDetails) {
         return matchService.getMatches(userDetails.getUsername());
     }
+
+    @GetMapping("/requests")
+    public List<ProfileResponse> requests(@AuthenticationPrincipal UserDetails userDetails) {
+        return matchService.getIncomingRequests(userDetails.getUsername());
+    }
 }
+

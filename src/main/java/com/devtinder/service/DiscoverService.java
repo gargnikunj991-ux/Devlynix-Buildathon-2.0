@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.stream.Collectors;
+import com.devtinder.repository.SwipeRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,10 +21,16 @@ public class DiscoverService {
 
     private final UserRepository userRepository;
     private final MatchService matchService;
+    private final SwipeRepository swipeRepository;
 
-    public DiscoverService(UserRepository userRepository, MatchService matchService) {
+    public DiscoverService(
+            UserRepository userRepository,
+            MatchService matchService,
+            SwipeRepository swipeRepository
+    ) {
         this.userRepository = userRepository;
         this.matchService = matchService;
+        this.swipeRepository = swipeRepository;
     }
 
     @Transactional(readOnly = true)
@@ -44,6 +51,12 @@ public class DiscoverService {
         User currentUser = findByEmail(email);
         Swipe.Direction swipeDirection = parseDirection(direction);
         return matchService.swipe(currentUser, targetUserId, swipeDirection);
+    }
+
+    @Transactional
+    public void resetPasses(String email) {
+        User currentUser = findByEmail(email);
+        swipeRepository.deleteBySwiperIdAndDirection(currentUser.getId(), Swipe.Direction.PASS);
     }
 
     private DiscoverResponse toDiscoverResponse(User candidate, Set<String> currentSkills) {

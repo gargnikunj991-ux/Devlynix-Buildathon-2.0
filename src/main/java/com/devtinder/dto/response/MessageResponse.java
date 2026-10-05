@@ -9,8 +9,14 @@ public record MessageResponse(
         Long senderId,
         String senderName,
         String content,
-        Instant sentAt
+        Instant sentAt,
+        boolean isRead,
+        Instant readAt
 ) {
+    public MessageResponse(Long id, Long matchId, Long senderId, String senderName, String content, Instant sentAt) {
+        this(id, matchId, senderId, senderName, content, sentAt, false, null);
+    }
+
     public static MessageResponse from(Message message) {
         return new MessageResponse(
                 message.getId(),
@@ -18,7 +24,9 @@ public record MessageResponse(
                 message.getSender().getId(),
                 message.getSender().getName(),
                 message.getContent(),
-                message.getSentAt()
+                message.getSentAt(),
+                message.isRead(),
+                message.getReadAt()
         );
     }
 }

@@ -11,8 +11,10 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -30,9 +32,18 @@ public class ChatController {
     @GetMapping("/{matchId}/messages")
     public List<MessageResponse> messages(
             @AuthenticationPrincipal UserDetails userDetails,
+            @PathVariable Long matchId,
+            @RequestParam(required = false) Long after
+    ) {
+        return chatService.getMessages(userDetails.getUsername(), matchId, after);
+    }
+
+    @PutMapping("/{matchId}/read")
+    public void markRead(
+            @AuthenticationPrincipal UserDetails userDetails,
             @PathVariable Long matchId
     ) {
-        return chatService.getMessages(userDetails.getUsername(), matchId);
+        chatService.markAsRead(userDetails.getUsername(), matchId);
     }
 
     @PostMapping("/{matchId}/messages")

@@ -7,6 +7,7 @@ import com.devtinder.entity.User;
 import com.devtinder.exception.ResourceNotFoundException;
 import com.devtinder.repository.MessageRepository;
 import com.devtinder.repository.UserRepository;
+import java.time.Instant;
 import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,12 +31,28 @@ public class ChatService {
 
     @Transactional(readOnly = true)
     public List<MessageResponse> getMessages(String email, Long matchId) {
+        return getMessages(email, matchId, null);
+    }
+
+    @Transactional(readOnly = true)
+    public List<MessageResponse> getMessages(String email, Long matchId, Long afterId) {
         User user = findByEmail(email);
         matchService.getMatchForUser(matchId, user);
 
-        return messageRepository.findByMatchIdOrderBySentAtAsc(matchId).stream()
+        List<Message> messages = (afterId != null && afterId > 0)
+                ? messageRepository.findByMatchIdAndIdGreaterThanOrderBySentAtAsc(matchId, afterId)
+                : messageRepository.findByMatchIdOrderBySentAtAsc(matchId);
+
+        return messages.stream()
                 .map(MessageResponse::from)
                 .toList();
+    }
+
+    @Transactional
+    public void markAsRead(String email, Long matchId) {
+        User user = findByEmail(email);
+        matchService.getMatchForUser(matchId, user);
+        messageRepository.markMessagesAsRead(matchId, user.getId(), Instant.now());
     }
 
     @Transactional

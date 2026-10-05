@@ -6,6 +6,10 @@ public record MatchResponse(
         Long id,
         ProfileResponse user,
         Instant matchedAt,
-        boolean matched
+        boolean matched,
+        long unreadCount
 ) {
+    public MatchResponse(Long id, ProfileResponse user, Instant matchedAt, boolean matched) {
+        this(id, user, matchedAt, matched, 0L);
+    }
 }

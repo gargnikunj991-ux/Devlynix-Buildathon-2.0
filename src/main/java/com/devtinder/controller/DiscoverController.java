@@ -8,6 +8,7 @@ import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -39,5 +40,10 @@ public class DiscoverController {
             @Valid @RequestBody SwipeRequest request
     ) {
         return discoverService.swipe(userDetails.getUsername(), request.targetUserId(), request.direction());
+    }
+
+    @DeleteMapping("/reset-passes")
+    public void resetPasses(@AuthenticationPrincipal UserDetails userDetails) {
+        discoverService.resetPasses(userDetails.getUsername());
     }
 }

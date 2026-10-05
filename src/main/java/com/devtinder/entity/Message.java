@@ -34,6 +34,12 @@ public class Message {
     @Column(nullable = false, updatable = false)
     private Instant sentAt;
 
+    @Column(nullable = false)
+    private boolean isRead = false;
+
+    @Column
+    private Instant readAt;
+
     protected Message() {
     }
 
@@ -66,5 +72,21 @@ public class Message {
 
     public Instant getSentAt() {
         return sentAt;
+    }
+
+    public boolean isRead() {
+        return isRead;
+    }
+
+    public void setRead(boolean read) {
+        isRead = read;
+    }
+
+    public Instant getReadAt() {
+        return readAt;
+    }
+
+    public void setReadAt(Instant readAt) {
+        this.readAt = readAt;
     }
 }

@@ -26,4 +26,8 @@ public interface SwipeRepository extends JpaRepository<Swipe, Long> {
             order by s.createdAt desc
             """)
     List<User> findIncomingLikes(@Param("userId") Long userId);
+
+    void deleteBySwiperIdAndDirection(Long swiperId, Swipe.Direction direction);
+
+    void deleteBySwiperIdAndSwipedId(Long swiperId, Long swipedId);
 }

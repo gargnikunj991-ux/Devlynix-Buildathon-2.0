@@ -86,4 +86,42 @@ class MatchServiceTest {
         List<ProfileResponse> requests = matchService.getIncomingRequests(userAlice.getEmail());
         assertTrue(requests.isEmpty());
     }
+
+    @Autowired
+    private DiscoverService discoverService;
+
+    @Test
+    void testUnmatch() {
+        // Form a match between Alice and Bob
+        matchService.swipe(userBob, userAlice.getId(), Swipe.Direction.LIKE);
+        MatchResponse matchResponse = matchService.swipe(userAlice, userBob.getId(), Swipe.Direction.LIKE);
+        assertTrue(matchResponse.matched());
+
+        List<MatchResponse> matchesBefore = matchService.getMatches(userAlice.getEmail());
+        assertEquals(1, matchesBefore.size());
+
+        // Unmatch
+        matchService.unmatch(userAlice.getEmail(), matchResponse.id());
+
+        // Should have 0 matches now
+        List<MatchResponse> matchesAfter = matchService.getMatches(userAlice.getEmail());
+        assertTrue(matchesAfter.isEmpty());
+    }
+
+    @Test
+    void testResetPasses() {
+        // Alice passes on Bob
+        matchService.swipe(userAlice, userBob.getId(), Swipe.Direction.PASS);
+
+        // Discover for Alice should not show Bob
+        var discoverBefore = discoverService.discover(userAlice.getEmail(), null);
+        assertTrue(discoverBefore.stream().noneMatch(d -> d.profile().id().equals(userBob.getId())));
+
+        // Reset passes
+        discoverService.resetPasses(userAlice.getEmail());
+
+        // Now Bob should be discoverable again!
+        var discoverAfter = discoverService.discover(userAlice.getEmail(), null);
+        assertTrue(discoverAfter.stream().anyMatch(d -> d.profile().id().equals(userBob.getId())));
+    }
 }

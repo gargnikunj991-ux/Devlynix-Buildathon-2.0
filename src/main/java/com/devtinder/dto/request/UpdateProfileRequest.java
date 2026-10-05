@@ -9,6 +9,17 @@ public record UpdateProfileRequest(
         @Size(max = 600) String bio,
         @Size(max = 160) String lookingFor,
         @Size(max = 120) String location,
+        @Size(max = 600) String projectPitch,
         List<String> skills
 ) {
+    public UpdateProfileRequest(
+            String name,
+            String githubUrl,
+            String bio,
+            String lookingFor,
+            String location,
+            List<String> skills
+    ) {
+        this(name, githubUrl, bio, lookingFor, location, null, skills);
+    }
 }

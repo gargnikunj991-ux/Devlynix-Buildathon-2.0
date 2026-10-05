@@ -31,17 +31,26 @@ public class ChatService {
 
     @Transactional(readOnly = true)
     public List<MessageResponse> getMessages(String email, Long matchId) {
-        return getMessages(email, matchId, null);
+        return getMessages(email, matchId, null, 100);
     }
 
     @Transactional(readOnly = true)
     public List<MessageResponse> getMessages(String email, Long matchId, Long afterId) {
+        return getMessages(email, matchId, afterId, 100);
+    }
+
+    @Transactional(readOnly = true)
+    public List<MessageResponse> getMessages(String email, Long matchId, Long afterId, int limit) {
         User user = findByEmail(email);
         matchService.getMatchForUser(matchId, user);
 
         List<Message> messages = (afterId != null && afterId > 0)
                 ? messageRepository.findByMatchIdAndIdGreaterThanOrderBySentAtAsc(matchId, afterId)
                 : messageRepository.findByMatchIdOrderBySentAtAsc(matchId);
+
+        if (limit > 0 && messages.size() > limit) {
+            messages = messages.subList(messages.size() - limit, messages.size());
+        }
 
         return messages.stream()
                 .map(MessageResponse::from)

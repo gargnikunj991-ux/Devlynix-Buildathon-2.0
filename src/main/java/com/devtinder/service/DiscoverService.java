@@ -42,7 +42,8 @@ public class DiscoverService {
         return userRepository.findDiscoverableUsers(currentUser.getId()).stream()
                 .filter(candidate -> required == null || lowerSkillSet(candidate).contains(required))
                 .map(candidate -> toDiscoverResponse(candidate, currentSkills))
-                .sorted(Comparator.comparingInt(DiscoverResponse::sharedSkillCount).reversed())
+                .sorted(Comparator.comparingInt(DiscoverResponse::synergyScore).reversed()
+                        .thenComparing(Comparator.comparingInt(DiscoverResponse::sharedSkillCount).reversed()))
                 .toList();
     }
 
@@ -66,7 +67,17 @@ public class DiscoverService {
                 .sorted()
                 .toList();
 
-        return new DiscoverResponse(ProfileResponse.from(candidate), sharedSkills.size(), sharedSkills);
+        long complementaryCount = candidate.getSkills().stream()
+                .filter(skill -> !currentSkills.contains(skill.getName().toLowerCase(Locale.ROOT)))
+                .count();
+
+        int base = 60;
+        int sharedBonus = Math.min(20, sharedSkills.size() * 7);
+        int complementaryBonus = (int) Math.min(10, complementaryCount * 3);
+        int pitchBonus = (candidate.getProjectPitch() != null && !candidate.getProjectPitch().isBlank()) ? 8 : 0;
+        int synergy = Math.min(99, Math.max(50, base + sharedBonus + complementaryBonus + pitchBonus));
+
+        return new DiscoverResponse(ProfileResponse.from(candidate), sharedSkills.size(), sharedSkills, synergy);
     }
 
     private User findByEmail(String email) {

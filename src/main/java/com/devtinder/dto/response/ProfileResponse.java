@@ -13,9 +13,24 @@ public record ProfileResponse(
         String bio,
         String lookingFor,
         String location,
+        String projectPitch,
         List<String> skills,
         Instant createdAt
 ) {
+    public ProfileResponse(
+            Long id,
+            String name,
+            String email,
+            String githubUrl,
+            String bio,
+            String lookingFor,
+            String location,
+            List<String> skills,
+            Instant createdAt
+    ) {
+        this(id, name, email, githubUrl, bio, lookingFor, location, null, skills, createdAt);
+    }
+
     public static ProfileResponse from(User user) {
         return new ProfileResponse(
                 user.getId(),
@@ -25,6 +40,7 @@ public record ProfileResponse(
                 user.getBio(),
                 user.getLookingFor(),
                 user.getLocation(),
+                user.getProjectPitch(),
                 user.getSkills().stream().map(Skill::getName).sorted().toList(),
                 user.getCreatedAt()
         );

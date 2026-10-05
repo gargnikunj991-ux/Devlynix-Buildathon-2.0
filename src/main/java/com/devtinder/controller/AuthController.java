@@ -32,4 +32,18 @@ public class AuthController {
     public AuthResponse login(@Valid @RequestBody LoginRequest request) {
         return authService.login(request);
     }
+
+    @PostMapping("/refresh")
+    public AuthResponse refresh(
+            @org.springframework.security.core.annotation.AuthenticationPrincipal org.springframework.security.core.userdetails.UserDetails userDetails,
+            @org.springframework.web.bind.annotation.RequestHeader(value = "Authorization", required = false) String authHeader
+    ) {
+        if (userDetails != null) {
+            return authService.refreshToken(userDetails.getUsername());
+        }
+        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            return authService.refreshTokenFromToken(authHeader.substring(7));
+        }
+        throw new IllegalArgumentException("Authentication required to refresh token");
+    }
 }

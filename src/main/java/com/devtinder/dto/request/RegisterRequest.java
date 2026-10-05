@@ -10,6 +10,16 @@ public record RegisterRequest(
         @NotBlank @Email @Size(max = 180) String email,
         @NotBlank @Size(min = 6, max = 120) String password,
         @Size(max = 260) String githubUrl,
+        @Size(max = 600) String projectPitch,
         List<String> skills
 ) {
+    public RegisterRequest(
+            String name,
+            String email,
+            String password,
+            String githubUrl,
+            List<String> skills
+    ) {
+        this(name, email, password, githubUrl, null, skills);
+    }
 }

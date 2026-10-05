@@ -49,6 +49,9 @@ public class ProfileService {
         if (request.location() != null) {
             user.setLocation(blankToNull(request.location()));
         }
+        if (request.projectPitch() != null) {
+            user.setProjectPitch(blankToNull(request.projectPitch()));
+        }
         if (request.skills() != null) {
             user.setSkills(resolveSkills(request.skills()));
         }

@@ -29,9 +29,17 @@ public class DiscoverController {
     @GetMapping
     public List<DiscoverResponse> discover(
             @AuthenticationPrincipal UserDetails userDetails,
-            @RequestParam(required = false) String skill
+            @RequestParam(required = false) String skill,
+            @RequestParam(required = false, defaultValue = "0") int page,
+            @RequestParam(required = false, defaultValue = "50") int size
     ) {
-        return discoverService.discover(userDetails.getUsername(), skill);
+        List<DiscoverResponse> results = discoverService.discover(userDetails.getUsername(), skill);
+        int start = Math.max(0, page * size);
+        if (start >= results.size()) {
+            return List.of();
+        }
+        int end = Math.min(results.size(), start + size);
+        return results.subList(start, end);
     }
 
     @PostMapping("/swipe")

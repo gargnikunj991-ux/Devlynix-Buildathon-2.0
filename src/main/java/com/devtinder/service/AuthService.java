@@ -59,6 +59,7 @@ public class AuthService {
         user.setEmail(email);
         user.setPasswordHash(passwordEncoder.encode(request.password()));
         user.setGithubUrl(blankToNull(request.githubUrl()));
+        user.setProjectPitch(blankToNull(request.projectPitch()));
         user.setSkills(resolveSkills(request.skills()));
 
         User saved = userRepository.save(user);
@@ -76,6 +77,20 @@ public class AuthService {
         UserDetails userDetails = userDetailsService.loadUserByUsername(email);
 
         return new AuthResponse(jwtService.generateToken(userDetails), ProfileResponse.from(user));
+    }
+
+    public AuthResponse refreshToken(String email) {
+        String normalizedEmail = normalizeEmail(email);
+        User user = userRepository.findByEmail(normalizedEmail)
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+        UserDetails userDetails = userDetailsService.loadUserByUsername(normalizedEmail);
+
+        return new AuthResponse(jwtService.generateToken(userDetails), ProfileResponse.from(user));
+    }
+
+    public AuthResponse refreshTokenFromToken(String token) {
+        String email = jwtService.extractUsername(token);
+        return refreshToken(email);
     }
 
     private Set<Skill> resolveSkills(List<String> skillNames) {

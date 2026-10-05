@@ -46,6 +46,9 @@ public class User {
     @Column(length = 120)
     private String location;
 
+    @Column(length = 600)
+    private String projectPitch;
+
     @Column(nullable = false)
     private boolean active = true;
 
@@ -133,6 +136,14 @@ public class User {
 
     public void setLocation(String location) {
         this.location = location;
+    }
+
+    public String getProjectPitch() {
+        return projectPitch;
+    }
+
+    public void setProjectPitch(String projectPitch) {
+        this.projectPitch = projectPitch;
     }
 
     public boolean isActive() {

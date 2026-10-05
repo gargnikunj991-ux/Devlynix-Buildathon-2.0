@@ -33,9 +33,10 @@ public class ChatController {
     public List<MessageResponse> messages(
             @AuthenticationPrincipal UserDetails userDetails,
             @PathVariable Long matchId,
-            @RequestParam(required = false) Long after
+            @RequestParam(required = false) Long after,
+            @RequestParam(required = false, defaultValue = "100") int limit
     ) {
-        return chatService.getMessages(userDetails.getUsername(), matchId, after);
+        return chatService.getMessages(userDetails.getUsername(), matchId, after, limit);
     }
 
     @PutMapping("/{matchId}/read")

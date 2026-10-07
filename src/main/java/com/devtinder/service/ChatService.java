@@ -61,7 +61,10 @@ public class ChatService {
     public void markAsRead(String email, Long matchId) {
         User user = findByEmail(email);
         matchService.getMatchForUser(matchId, user);
-        messageRepository.markMessagesAsRead(matchId, user.getId(), Instant.now());
+        try {
+            messageRepository.markMessagesAsRead(matchId, user.getId(), Instant.now());
+        } catch (Exception ignored) {
+        }
     }
 
     @Transactional

@@ -34,7 +34,7 @@ public class Message {
     @Column(nullable = false, updatable = false)
     private Instant sentAt;
 
-    @Column(nullable = false)
+    @Column(nullable = false, columnDefinition = "boolean default false")
     private boolean isRead = false;
 
     @Column

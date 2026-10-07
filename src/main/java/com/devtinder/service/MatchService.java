@@ -116,7 +116,11 @@ public class MatchService {
                 ? match.getUserTwo()
                 : match.getUserOne();
 
-        long unreadCount = messageRepository.countByMatchIdAndSenderIdNotAndIsReadFalse(match.getId(), viewer.getId());
+        long unreadCount = 0;
+        try {
+            unreadCount = messageRepository.countByMatchIdAndSenderIdNotAndIsReadFalse(match.getId(), viewer.getId());
+        } catch (Exception ignored) {
+        }
 
         return new MatchResponse(match.getId(), ProfileResponse.from(otherUser), match.getCreatedAt(), true, unreadCount);
     }

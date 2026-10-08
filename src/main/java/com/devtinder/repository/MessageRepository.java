@@ -26,6 +26,8 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
             """)
     void markMessagesAsRead(@Param("matchId") Long matchId, @Param("userId") Long userId, @Param("now") Instant now);
 
-    void deleteByMatchId(Long matchId);
+    @Modifying
+    @Query("delete from Message m where m.match.id = :matchId")
+    void deleteByMatchId(@Param("matchId") Long matchId);
 }
 

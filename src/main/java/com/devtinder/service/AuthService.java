@@ -4,15 +4,14 @@ import com.devtinder.dto.request.LoginRequest;
 import com.devtinder.dto.request.RegisterRequest;
 import com.devtinder.dto.response.AuthResponse;
 import com.devtinder.dto.response.ProfileResponse;
+import com.devtinder.dto.response.SessionResponse;
+import com.devtinder.entity.RefreshToken;
 import com.devtinder.entity.Skill;
 import com.devtinder.entity.User;
 import com.devtinder.repository.SkillRepository;
 import com.devtinder.repository.UserRepository;
 import com.devtinder.security.JwtService;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Locale;
-import java.util.Set;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -20,6 +19,11 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 
 @Service
 public class AuthService {
@@ -30,6 +34,7 @@ public class AuthService {
     private final AuthenticationManager authenticationManager;
     private final UserDetailsService userDetailsService;
     private final JwtService jwtService;
+    private final RefreshTokenService refreshTokenService;
 
     public AuthService(
             UserRepository userRepository,
@@ -37,7 +42,8 @@ public class AuthService {
             PasswordEncoder passwordEncoder,
             AuthenticationManager authenticationManager,
             UserDetailsService userDetailsService,
-            JwtService jwtService
+            JwtService jwtService,
+            RefreshTokenService refreshTokenService
     ) {
         this.userRepository = userRepository;
         this.skillRepository = skillRepository;
@@ -45,10 +51,11 @@ public class AuthService {
         this.authenticationManager = authenticationManager;
         this.userDetailsService = userDetailsService;
         this.jwtService = jwtService;
+        this.refreshTokenService = refreshTokenService;
     }
 
     @Transactional
-    public AuthResponse register(RegisterRequest request) {
+    public AuthResponse register(RegisterRequest request, HttpServletRequest httpRequest) {
         String email = normalizeEmail(request.email());
         if (userRepository.existsByEmail(email)) {
             throw new IllegalArgumentException("Email is already registered");
@@ -64,33 +71,50 @@ public class AuthService {
 
         User saved = userRepository.save(user);
         String token = jwtService.generateToken(toUserDetails(saved));
+        RefreshToken refreshToken = refreshTokenService.createSession(saved, httpRequest);
 
-        return new AuthResponse(token, ProfileResponse.from(saved));
+        return new AuthResponse(token, refreshToken.getToken(), ProfileResponse.from(saved));
     }
 
-    public AuthResponse login(LoginRequest request) {
+    public AuthResponse login(LoginRequest request, HttpServletRequest httpRequest) {
         String email = normalizeEmail(request.email());
         authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(email, request.password()));
 
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
         UserDetails userDetails = userDetailsService.loadUserByUsername(email);
+        String token = jwtService.generateToken(userDetails);
+        RefreshToken refreshToken = refreshTokenService.createSession(user, httpRequest);
 
-        return new AuthResponse(jwtService.generateToken(userDetails), ProfileResponse.from(user));
+        return new AuthResponse(token, refreshToken.getToken(), ProfileResponse.from(user));
     }
 
-    public AuthResponse refreshToken(String email) {
-        String normalizedEmail = normalizeEmail(email);
-        User user = userRepository.findByEmail(normalizedEmail)
+    @Transactional
+    public AuthResponse refreshToken(String rawRefreshToken, HttpServletRequest httpRequest) {
+        RefreshTokenService.RotationResult result = refreshTokenService.rotateToken(rawRefreshToken, httpRequest);
+        UserDetails userDetails = toUserDetails(result.user());
+        String newAccessToken = jwtService.generateToken(userDetails);
+
+        return new AuthResponse(newAccessToken, result.newRefreshToken(), ProfileResponse.from(result.user()));
+    }
+
+    @Transactional
+    public void logout(String rawRefreshToken) {
+        refreshTokenService.revokeToken(rawRefreshToken);
+    }
+
+    @Transactional(readOnly = true)
+    public List<SessionResponse> getSessions(String email, String currentRefreshToken) {
+        User user = userRepository.findByEmail(normalizeEmail(email))
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
-        UserDetails userDetails = userDetailsService.loadUserByUsername(normalizedEmail);
-
-        return new AuthResponse(jwtService.generateToken(userDetails), ProfileResponse.from(user));
+        return refreshTokenService.getActiveSessions(user, currentRefreshToken);
     }
 
-    public AuthResponse refreshTokenFromToken(String token) {
-        String email = jwtService.extractUsername(token);
-        return refreshToken(email);
+    @Transactional
+    public void terminateSession(String email, Long sessionId) {
+        User user = userRepository.findByEmail(normalizeEmail(email))
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+        refreshTokenService.terminateSession(user, sessionId);
     }
 
     private Set<Skill> resolveSkills(List<String> skillNames) {

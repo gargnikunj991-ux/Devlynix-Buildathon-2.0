@@ -1,16 +1,27 @@
 package com.devtinder.controller;
 
 import com.devtinder.dto.request.LoginRequest;
+import com.devtinder.dto.request.RefreshRequest;
 import com.devtinder.dto.request.RegisterRequest;
 import com.devtinder.dto.response.AuthResponse;
+import com.devtinder.dto.response.SessionResponse;
 import com.devtinder.service.AuthService;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -24,26 +35,67 @@ public class AuthController {
 
     @PostMapping("/register")
     @ResponseStatus(HttpStatus.CREATED)
-    public AuthResponse register(@Valid @RequestBody RegisterRequest request) {
-        return authService.register(request);
+    public AuthResponse register(@Valid @RequestBody RegisterRequest request, HttpServletRequest httpRequest) {
+        return authService.register(request, httpRequest);
     }
 
     @PostMapping("/login")
-    public AuthResponse login(@Valid @RequestBody LoginRequest request) {
-        return authService.login(request);
+    public AuthResponse login(@Valid @RequestBody LoginRequest request, HttpServletRequest httpRequest) {
+        return authService.login(request, httpRequest);
     }
 
     @PostMapping("/refresh")
     public AuthResponse refresh(
-            @org.springframework.security.core.annotation.AuthenticationPrincipal org.springframework.security.core.userdetails.UserDetails userDetails,
-            @org.springframework.web.bind.annotation.RequestHeader(value = "Authorization", required = false) String authHeader
+            @RequestBody(required = false) RefreshRequest request,
+            @RequestHeader(value = "X-Refresh-Token", required = false) String headerToken,
+            HttpServletRequest httpRequest
     ) {
-        if (userDetails != null) {
-            return authService.refreshToken(userDetails.getUsername());
+        String token = request != null && request.refreshToken() != null && !request.refreshToken().isBlank()
+                ? request.refreshToken()
+                : headerToken;
+
+        if (token == null || token.isBlank()) {
+            throw new IllegalArgumentException("Refresh token is required");
         }
-        if (authHeader != null && authHeader.startsWith("Bearer ")) {
-            return authService.refreshTokenFromToken(authHeader.substring(7));
+
+        return authService.refreshToken(token.trim(), httpRequest);
+    }
+
+    @PostMapping("/logout")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void logout(
+            @RequestBody(required = false) RefreshRequest request,
+            @RequestHeader(value = "X-Refresh-Token", required = false) String headerToken
+    ) {
+        String token = request != null && request.refreshToken() != null && !request.refreshToken().isBlank()
+                ? request.refreshToken()
+                : headerToken;
+
+        if (token != null && !token.isBlank()) {
+            authService.logout(token.trim());
         }
-        throw new IllegalArgumentException("Authentication required to refresh token");
+    }
+
+    @GetMapping("/sessions")
+    public List<SessionResponse> getSessions(
+            @AuthenticationPrincipal UserDetails userDetails,
+            @RequestHeader(value = "X-Refresh-Token", required = false) String headerToken
+    ) {
+        if (userDetails == null) {
+            throw new IllegalArgumentException("Authentication required");
+        }
+        return authService.getSessions(userDetails.getUsername(), headerToken);
+    }
+
+    @DeleteMapping("/sessions/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void terminateSession(
+            @AuthenticationPrincipal UserDetails userDetails,
+            @PathVariable Long id
+    ) {
+        if (userDetails == null) {
+            throw new IllegalArgumentException("Authentication required");
+        }
+        authService.terminateSession(userDetails.getUsername(), id);
     }
 }

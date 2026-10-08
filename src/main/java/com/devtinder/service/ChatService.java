@@ -68,6 +68,13 @@ public class ChatService {
     }
 
     @Transactional
+    public void clearChat(String email, Long matchId) {
+        User user = findByEmail(email);
+        matchService.getMatchForUser(matchId, user);
+        messageRepository.deleteByMatchId(matchId);
+    }
+
+    @Transactional
     public MessageResponse sendMessage(String email, Long matchId, String content) {
         User sender = findByEmail(email);
         Match match = matchService.getMatchForUser(matchId, sender);

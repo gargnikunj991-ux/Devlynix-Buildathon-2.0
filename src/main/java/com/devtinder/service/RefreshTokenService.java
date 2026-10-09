@@ -112,10 +112,18 @@ public class RefreshTokenService {
         if (rawToken == null || rawToken.isBlank()) {
             return;
         }
-        refreshTokenRepository.findByToken(rawToken).ifPresent(t -> {
-            refreshTokenRepository.deleteByFamilyId(t.getFamilyId());
-            log.info("Terminated session family [{}] for user [{}]", t.getFamilyId(), t.getUser().getEmail());
+        refreshTokenRepository.findByToken(rawToken.trim()).ifPresentOrElse(t -> {
+            refreshTokenRepository.revokeFamily(t.getFamilyId(), Instant.now());
+            log.info("Revoked session family [{}] on logout for user [{}]", t.getFamilyId(), t.getUser().getEmail());
+        }, () -> {
+            log.warn("Logout requested for refresh token that was not found in database: [{}]", rawToken);
         });
+    }
+
+    @Transactional
+    public void revokeAllUserTokens(User user) {
+        refreshTokenRepository.revokeAllUserTokens(user.getId(), Instant.now());
+        log.info("Revoked all active refresh tokens for user [{}]", user.getEmail());
     }
 
     @Transactional(readOnly = true)
@@ -135,8 +143,29 @@ public class RefreshTokenService {
 
     @Transactional
     public void terminateSession(User user, Long sessionId) {
-        refreshTokenRepository.deleteByIdAndUserId(sessionId, user.getId());
-        log.info("User [{}] terminated session ID [{}]", user.getEmail(), sessionId);
+        refreshTokenRepository.findById(sessionId).ifPresent(t -> {
+            if (t.getUser().getId().equals(user.getId())) {
+                refreshTokenRepository.revokeFamily(t.getFamilyId(), Instant.now());
+                log.info("User [{}] revoked session family [{}]", user.getEmail(), t.getFamilyId());
+            }
+        });
+    }
+
+    @Transactional
+    public void terminateOtherSessions(User user, String currentRefreshToken) {
+        if (currentRefreshToken == null || currentRefreshToken.isBlank()) {
+            return;
+        }
+        refreshTokenRepository.findByToken(currentRefreshToken.trim()).ifPresent(currentToken -> {
+            String currentFamilyId = currentToken.getFamilyId();
+            List<RefreshToken> allTokens = refreshTokenRepository.findByUserAndRevokedFalseOrderByLastActiveDesc(user);
+            for (RefreshToken t : allTokens) {
+                if (!t.getFamilyId().equals(currentFamilyId)) {
+                    refreshTokenRepository.revokeFamily(t.getFamilyId(), Instant.now());
+                }
+            }
+            log.info("User [{}] revoked all other session families except [{}]", user.getEmail(), currentFamilyId);
+        });
     }
 
     @Scheduled(fixedRate = 3600000) // Hourly background cleanup

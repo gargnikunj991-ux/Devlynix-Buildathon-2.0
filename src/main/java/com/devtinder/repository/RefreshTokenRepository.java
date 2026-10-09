@@ -19,9 +19,13 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshToken, Long
 
     List<RefreshToken> findByFamilyId(String familyId);
 
-    @Modifying
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("update RefreshToken r set r.revoked = true, r.revokedAt = :now where r.familyId = :familyId")
     void revokeFamily(@Param("familyId") String familyId, @Param("now") Instant now);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("update RefreshToken r set r.revoked = true, r.revokedAt = :now where r.user.id = :userId and r.revoked = false")
+    void revokeAllUserTokens(@Param("userId") Long userId, @Param("now") Instant now);
 
     @Modifying
     @Query("delete from RefreshToken r where r.token = :token")

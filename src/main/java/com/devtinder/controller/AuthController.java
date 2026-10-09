@@ -65,7 +65,8 @@ public class AuthController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void logout(
             @RequestBody(required = false) RefreshRequest request,
-            @RequestHeader(value = "X-Refresh-Token", required = false) String headerToken
+            @RequestHeader(value = "X-Refresh-Token", required = false) String headerToken,
+            @AuthenticationPrincipal UserDetails userDetails
     ) {
         String token = request != null && request.refreshToken() != null && !request.refreshToken().isBlank()
                 ? request.refreshToken()
@@ -73,6 +74,8 @@ public class AuthController {
 
         if (token != null && !token.isBlank()) {
             authService.logout(token.trim());
+        } else if (userDetails != null) {
+            authService.logoutUser(userDetails.getUsername());
         }
     }
 
@@ -87,6 +90,15 @@ public class AuthController {
         return authService.getSessions(userDetails.getUsername(), headerToken);
     }
 
+    @PostMapping("/logout-all")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void logoutAll(@AuthenticationPrincipal UserDetails userDetails) {
+        if (userDetails == null) {
+            throw new IllegalArgumentException("Authentication required");
+        }
+        authService.logoutUser(userDetails.getUsername());
+    }
+
     @DeleteMapping("/sessions/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void terminateSession(
@@ -97,5 +109,24 @@ public class AuthController {
             throw new IllegalArgumentException("Authentication required");
         }
         authService.terminateSession(userDetails.getUsername(), id);
+    }
+
+    @PostMapping("/sessions/terminate-others")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void terminateOtherSessions(
+            @AuthenticationPrincipal UserDetails userDetails,
+            @RequestBody(required = false) RefreshRequest request,
+            @RequestHeader(value = "X-Refresh-Token", required = false) String headerToken
+    ) {
+        if (userDetails == null) {
+            throw new IllegalArgumentException("Authentication required");
+        }
+        String token = request != null && request.refreshToken() != null && !request.refreshToken().isBlank()
+                ? request.refreshToken()
+                : headerToken;
+        if (token == null || token.isBlank()) {
+            throw new IllegalArgumentException("Current refresh token is required");
+        }
+        authService.terminateOtherSessions(userDetails.getUsername(), token.trim());
     }
 }

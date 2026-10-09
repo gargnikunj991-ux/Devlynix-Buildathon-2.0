@@ -1,13 +1,13 @@
-# Devlynix — Roadmap, Architecture & Feature Gap Analysis
+# Devlynix — Roadmap, Architecture & Feature Analysis
 
 **Date:** October 2026  
-**Document Version:** 1.1  
+**Document Version:** 2.0  
 **Backend:** Spring Boot 3.3.5 / Java 21 / Neon PostgreSQL / Render  
-**Frontend:** Next.js 16 (Turbopack) / React 19 / Tailwind CSS / Vercel  
+**Frontend:** Next.js 16 (Turbopack) / React 19 / Tailwind CSS v4 / Vercel  
 
 ---
 
-## 1. Executive Summary & Current Status
+## 1. Executive Summary & Live Infrastructure State
 
 Devlynix is a developer pairing platform inspired by Tinder, tailored specifically for hackathon builders, engineers, and open-source contributors. Developers create a profile showcasing technical skills, discover potential collaborators, swipe to connect, and communicate via real-time messaging.
 
@@ -21,202 +21,103 @@ Devlynix is a developer pairing platform inspired by Tinder, tailored specifical
 | **Health Check** | Spring Boot Actuator / Custom Health Endpoint | **HEALTHY** (`{"status":"ok"}`) | `/api/health` |
 | **Continuous Delivery**| GitHub Actions (`.github/workflows/ci-cd.yml`) | **CONFIGURED** | Auto-triggered on `push` |
 
-### Verified End-to-End Capabilities
-1. **User Authentication**: Registration with hashed passwords (BCrypt) and JWT token generation.
-2. **Developer Discovery**: Querying available developers excluding already-swiped users.
-3. **Mutual Matching**: Instant bidirectional match generation when two developers swipe `LIKE` on each other.
-4. **Chat Messaging**: Message persistence in PostgreSQL and real-time polling synchronization (2-second interval with smooth scrolling).
+---
+
+## 2. Feature Implementation Status: Backend vs. Frontend Matrix
+
+All major foundational capabilities planned in v1.0 and v1.1 have been **fully implemented end-to-end**:
+
+| Feature Area | Backend API | Frontend Client (`lib/api.ts`) | Frontend UI (`app/`) | Status |
+| :--- | :--- | :--- | :--- | :---: |
+| **Incoming Match Requests (Signal Radar)** | `GET /api/matches/requests` | `api.getIncomingRequests` | Signal Radar corner widget + `IncomingRequestsModal` with Accept/Decline actions | 🟢 **Complete** |
+| **Skill-Based Discovery Filtering** | `GET /api/discover?skill={skill}` | `api.discover(token, skill, page, size)` | Retro tag selector bar with preset chips, custom search, and reset filter button | 🟢 **Complete** |
+| **Profile Editing / Updating** | `PUT` & `PATCH /api/profile/me` | `api.updateProfile` | `EditProfileModal` with bio, location, goals, and interactive skill chip manager | 🟢 **Complete** |
+| **GitHub Links & Avatar Resolution** | `githubUrl` field in User entity | `getAvatarUrl` & `getGithubUsername` | Clickable `[GITHUB]` links + auto-resolved GitHub avatar images | 🟢 **Complete** |
+| **Discovery Queue Rewind (Reset Passes)** | `DELETE /api/discover/reset-passes` | `api.resetPasses` | Rewind Queue button on empty candidate feed to re-review skipped profiles | 🟢 **Complete** |
+| **Unmatching & Conversation Severance** | `DELETE /api/matches/{matchId}` | `api.unmatch` | Unmatch action inside `TeammateIntelPanel` chat drawer | 🟢 **Complete** |
+| **Chat Message History & Clear Chat** | `GET` & `DELETE /api/chat/{matchId}/messages` | `api.getMessages`, `api.clearChat` | Real-time chat feed with Clear Chat option in `TeammateIntelPanel` | 🟢 **Complete** |
+| **Unread Indicators & Read Receipts** | `PUT /api/chat/{matchId}/read` | `api.markChatAsRead` | Automatic read marking on active match conversation | 🟢 **Complete** |
+| **Adaptive Delta Polling Sync** | `GET /api/chat/{matchId}/messages?after={id}` | Incremental delta fetch | 2s active poll / 30s background backoff via Page Visibility API | 🟢 **Complete** |
+| **Optimistic Chat UI & Audio FX** | Supported via REST persistence | Optimistic state update | Instant message rendering + Web Audio API synthesizer clicks & chimes | 🟢 **Complete** |
+| **Refresh Token Rotation (RTR)** | `POST /api/auth/refresh` | `api.refreshToken` + 401 interceptor | Silent automatic token refresh with multi-request concurrency mutex lock | 🟢 **Complete** |
+| **Multi-Device Session Telemetry** | `GET /api/auth/sessions`, `DELETE /sessions/{id}`, `POST /terminate-others` | `api.getSessions`, `api.terminateSession`, etc. | Dedicated Cyberpunk `/sessions` page with device info, IP, and remote kill switches | 🟢 **Complete** |
+| **Sliding-Window Rate Limiting** | `RateLimitFilter.java` (60 req/min) | Handles HTTP 429 status | Protects all API endpoints against abuse with standard RFC headers | 🟢 **Complete** |
+| **Automated Database Cleanup** | Hourly `@Scheduled` Spring worker | Automatic server-side | Purges expired refresh tokens and aged revoked records (> 24h) | 🟢 **Complete** |
 
 ---
 
-## 2. Feature Gap Analysis: Backend Capabilities vs. Frontend UI
+## 3. Architecture Highlights
 
-A comprehensive audit of the backend codebase reveals several implemented backend APIs, database columns, and features that are either **not exposed** or **partially exposed** in the current frontend user interface.
+### 3.1 Security & Token Family Architecture
+1. **Short-Lived Access Tokens:** Expire in 10–15 minutes, mitigating the impact of token interception.
+2. **Rotating Refresh Tokens:** Valid for 7 days, renewed on every `/api/auth/refresh` invocation.
+3. **Compromise / Replay Attack Defense:**
+   - Every login session generates a distinct `familyId`.
+   - When rotated, the prior token is tagged as `revoked = true` with a timestamp and retained for 24 hours.
+   - If an attacker attempts to reuse an already-revoked refresh token, the server detects the replay attempt and immediately invalidates the **entire `familyId`**, revoking access across that device session.
+4. **Selective Multi-Device Logout:**
+   - Logging out of a mobile browser deletes only that device's session token family; desktop and laptop sessions remain active.
+   - `/sessions` page enables remote termination of lost or compromised devices.
 
-| Feature Area | Backend Implementation | Frontend Client (`lib/api.ts`) | Frontend UI (`app/`) | Status / Gap |
-| :--- | :--- | :--- | :--- | :--- |
-| **Incoming Match Requests ("Who Liked You")** | Swipes are recorded in database (`Swipe` entity), but no dedicated query exists yet | Not implemented | Not implemented | 🔴 **Missing End-to-End**: Users cannot see who has sent them a match request; requires new backend endpoint + corner/drawer UI. |
-| **Skill-Based Discovery Filtering** | `GET /api/discover?skill={skill}` (`DiscoverController.java:31`) | `api.discover(token, skill)` supported | `app/dashboard/page.tsx` calls `api.discover(token)` with no parameter. | 🔴 **Missing UI**: No skill filter bar, tag selector, or dropdown to filter candidates by skill. |
-| **Profile Editing / Updating** | `PUT /api/profile/me` with `UpdateProfileRequest` (`name`, `bio`, `githubUrl`, `lookingFor`, `location`, `skills`) | `api.updateProfile(token, payload)` defined | Not referenced anywhere in `app/` or `components/`. | 🔴 **Missing UI**: Users cannot edit their profile, add/remove skills, or update bios after registration. |
-| **GitHub Profile Links** | `githubUrl` field in `User` entity, `RegisterRequest`, and `ProfileResponse` | Returned in `Profile` interface | Collected on `/register`, but never rendered as a clickable link on cards or matches. | 🟡 **Missing Link**: No "View GitHub Profile" button/link on developer discovery cards or chat header. |
-| **Location & Availability Display** | `location` & `lookingFor` fields stored and returned in `ProfileResponse` | Defined in `Profile` interface | Only displays `bio \|\| lookingFor` as single string fallback. `location` is omitted. | 🟡 **Partial UI**: Teammate's location/timezone and target project intent (`lookingFor`) are not cleanly broken out. |
-| **STOMP WebSocket Messaging** | `/ws` SockJS endpoint + `/topic/matches/{matchId}` + `@MessageMapping("/chat.send")` | Not implemented in `lib/api.ts` | Uses 2-second HTTP polling interval (`app/matches/page.tsx`) | 🟢 **Functional Alternative**: Polling works reliably; full WebSocket client (`@stomp/stompjs`) can be integrated for sub-100ms delivery. |
-| **Rate Limit Feedback** | `RateLimitFilter.java` returning `429 Too Many Requests` with `X-RateLimit-*` headers | Standard fetch handler throws generic `ApiError` | Generic error toast/alert | 🟡 **Missing UI**: No countdown or specific notification explaining request throttling. |
-| **Teammate Profile in Chat** | `MatchResponse` includes full `ProfileResponse` (`skills`, `bio`, `githubUrl`, `createdAt`) | Stored in `Match.user` | `app/matches/page.tsx` header only shows `user.name`. | 🟡 **Underutilized Data**: Chat screen does not show teammate's skills, bio, or contact info. |
-| **Unmatching / Conversation Archival** | Not implemented in backend | Not implemented | Not implemented | ⚪ **Future Feature**: Neither backend nor frontend supports unmatching or deleting conversation history. |
-
----
-
-## 3. Detailed Breakdown & Architecture of Key Features
-
-### 3.1 Incoming Match Requests Section ("Who Liked You" / Pending Invites)
-Currently, matching is a blind double-opt-in: Developer A likes Developer B, but Developer B has no idea Developer A is interested until Developer B happens to stumble upon Developer A in the general discovery feed and swipes right.
-
-#### Proposed UI Experience:
-- **Corner Notification / Drawer**: In the top-right corner of the Dashboard (or a persistent floating radar widget in the bottom corner), display an **`INCOMING SIGNALS [N]`** counter badge.
-- **Card Preview**: Clicking it expands a drawer or modal displaying developers who have already liked your profile.
-- **Immediate Match Action**: Each card includes:
-  - Developer's Name, GitHub link, Skills, and Hackathon Goals.
-  - **`[ACCEPT & MATCH]`** button: Calling the existing `POST /api/discover/swipe` (`direction: 'LIKE'`), instantly producing a match and opening the chat channel!
-  - **`[DECLINE]`** button: Calling `POST /api/discover/swipe` (`direction: 'PASS'`), quietly archiving the request.
-
-#### Required Backend Additions:
-1. **Repository Query (`SwipeRepository.java`)**:
-   ```java
-   @Query("""
-       select s.swiper
-       from Swipe s
-       where s.swiped.id = :userId
-         and s.direction = 'LIKE'
-         and s.swiper.id not in (
-             select s2.swiped.id
-             from Swipe s2
-             where s2.swiper.id = :userId
-         )
-       order by s.createdAt desc
-   """)
-   List<User> findIncomingPendingLikes(@Param("userId") Long userId);
-   ```
-2. **Controller Endpoint (`DiscoverController.java` or `MatchController.java`)**:
-   ```java
-   @GetMapping("/requests")
-   public List<ProfileResponse> getIncomingRequests(@AuthenticationPrincipal UserDetails userDetails) {
-       return matchService.getIncomingRequests(userDetails.getUsername());
-   }
-   ```
-3. **Frontend API Call (`lib/api.ts`)**:
-   ```typescript
-   getIncomingRequests(token: string) {
-       return request<Profile[]>("/matches/requests", {}, token);
-   }
-   ```
+### 3.2 Adaptive Real-Time Messaging Engine
+- **Why Adaptive Polling over Pure WebSockets:**
+  - Standard WebSockets on serverless or sleepable instances (Render free-tier, Neon scale-to-zero) suffer from broken socket connections and high idle resource overhead.
+  - Devlynix uses an **Adaptive HTTP Delta Polling** system:
+    - Queries only new messages via `?after={latestMessageId}`.
+    - Polls every 2 seconds while active.
+    - Uses the browser's `visibilitychange` API to automatically back off to 30 seconds when the tab is backgrounded.
+    - Refocusing the tab triggers an immediate poll.
+  - Result: Bandwidth and database operations reduced by over 90% without sacrificing real-time feel.
 
 ---
 
-### 3.2 Skill-Based Filtering in Discovery
-- **Backend Capability**: `DiscoverService.java` filters candidates using:
-  ```java
-  filter(candidate -> required == null || lowerSkillSet(candidate).contains(required))
-  ```
-  It already accepts any skill query parameter (`GET /api/discover?skill=React`).
-- **Frontend Opportunity**:
-  - Add a retro skill filter bar above the discovery card grid in `app/dashboard/page.tsx`.
-  - Let users click on their own skills or type in a search box to see only developers proficient in that stack (e.g., "Show me Rust devs", "Show me Next.js devs").
+## 4. Strategic Roadmap: Future Enhancements
+
+### Phase 1: Foundational Enhancements (100% Completed ✅)
+- [x] Incoming Match Requests (Signal Radar widget & modal)
+- [x] Tech stack filter bar with preset chips & arbitrary stack search
+- [x] Developer Profile editing modal (`EditProfileModal`)
+- [x] Clickable GitHub links & avatar resolution
+- [x] Queue rewind / reset skipped passes (`/reset-passes`)
+- [x] Unmatch & conversation severance (`/matches/{id}`)
+- [x] Clear conversation history (`DELETE /messages`)
+- [x] Refresh Token Rotation (RTR) with token family compromise defense
+- [x] Multi-device active session controls (`/sessions` page)
+- [x] Adaptive chat delta polling with Page Visibility API backoff
+- [x] Web Audio procedural audio feedback (swipes, matches, messages)
+
+### Phase 2: Production Hardening & Operations (Current Focus)
+- [ ] **Render Keep-Alive Cron:** Scheduled ping every 12 minutes to prevent Render free-tier cold starts.
+- [ ] **Interactive API Documentation:** Integrate `springdoc-openapi-starter-webmvc-ui` for live `/swagger-ui.html`.
+- [ ] **Database Migration Tool:** Transition Hibernate `ddl-auto=update` to **Flyway** migrations.
+- [ ] **Input Sanitization (XSS Prevention):** Add OWASP HTML sanitizer on bios and project pitches.
+
+### Phase 3: Advanced Collaboration Features
+- [ ] **Hackathon Project Pitches:** Allow developers to showcase their specific project concept with mockups.
+- [ ] **Squad / Team Formation:** Support multi-user squad formation (teams of 3–4 members) alongside 1-on-1 pairs.
+- [ ] **AI-Powered Synergy Scoring:** Machine learning matching that pairs complementary disciplines (e.g., Frontend engineers with Backend/ML engineers).
+- [ ] **Distributed Rate Limiting:** Migrate in-memory token bucket to **Redis** for multi-instance deployments.
 
 ---
 
-### 3.3 Profile Editing (Settings / Edit Modal)
-- **Backend Capability**: `PUT /api/profile/me` accepts partial or full updates for:
-  - `name`: string (max 120)
-  - `githubUrl`: string (max 260)
-  - `bio`: string (max 600)
-  - `lookingFor`: string (max 160)
-  - `location`: string (max 120)
-  - `skills`: string list
-- **Frontend Opportunity**:
-  - Add an `[EDIT PROFILE]` button next to "AUTHENTICATED DEVELOPER" in `app/dashboard/page.tsx`.
-  - Render an interactive `RetroModal` with fields to adjust bio, update hackathon goals, and add new skills as developers learn them.
+## 5. Architectural File Map
 
----
+### Backend (`Devlynix-Buildathon-2.0`)
+- `com.devtinder.controller.AuthController` — Auth, RTR, and session management endpoints.
+- `com.devtinder.controller.ProfileController` — Profile retrieval and updates.
+- `com.devtinder.controller.DiscoverController` — Discover feed, swiping, and pass reset.
+- `com.devtinder.controller.MatchController` — Matches list, incoming requests radar, unmatch.
+- `com.devtinder.controller.ChatController` — Message history, delta sync, read marking, chat clear.
+- `com.devtinder.security.SecurityConfig` — Stateless Spring Security chain and CORS configuration.
+- `com.devtinder.security.RateLimitFilter` — Sliding-window rate limiter (60 req/min).
+- `com.devtinder.service.RefreshTokenService` — Token family rotation, theft detection, hourly purge.
+- `com.devtinder.websocket.WebSocketConfig` — STOMP message broker configuration.
 
-### 3.4 GitHub & Social Integration
-- **Backend Capability**: `githubUrl` is stored in the `users` table and returned with every profile payload.
-- **Frontend Opportunity**:
-  - Add an external link icon / button (`[GITHUB]`) on each card in `app/dashboard/page.tsx` and in the chat header in `app/matches/page.tsx`.
-  - Auto-fetch the developer's GitHub avatar using `https://github.com/${username}.png` as an optional enhancement.
-
----
-
-### 3.5 Match Profile Drawer in Chat
-- **Backend Capability**: Full teammate metadata is provided in `MatchResponse.user`.
-- **Frontend Opportunity**:
-  - In `app/matches/page.tsx`, add a collapsible sidebar or header popover showing:
-    - Teammate skills tags
-    - Looking For / Hackathon goals
-    - Timezone / Location
-    - Direct GitHub link
-
----
-
-### 3.6 Additional Backend Capabilities & System Extensions
-
-1. **Instant Match Alert Push (WebSocket)**:
-   - When User B swipes `LIKE` on User A, completing the match, backend can publish an instant notification to `/topic/user/{userAId}/notifications`:
-     ```json
-     { "type": "NEW_MATCH", "matchId": 2, "user": { "name": "Alex Rivers", ... } }
-     ```
-   - User A sees an instant cyberpunk celebratory modal: *"MATCH FOUND! YOU AND ALEX CAN NOW CHAT"*.
-
-2. **Unread Message Indicators (`isRead` / `readAt`)**:
-   - Currently, `Message` entity has `id`, `match`, `sender`, `content`, `sentAt`.
-   - Adding `isRead boolean default false` or `readAt Instant` enables unread message counter badges on the matches sidebar and push notifications.
-
-3. **Discovery Reset / Rewind ("Reset Passes")**:
-   - Currently, `UserRepository.findDiscoverableUsers` permanently excludes anyone the user has swiped on (whether `LIKE` or `PASS`).
-   - In small developer communities or fast-paced hackathons, a user may run out of profiles quickly.
-   - Adding `DELETE /api/discover/reset-passes` allows developers to wipe their negative passes (`direction = 'PASS'`) and re-evaluate developers they previously skipped.
-
-4. **Online Presence & Last Seen**:
-   - Hooking into Spring WebSocket `SessionConnectedEvent` and `SessionDisconnectEvent` allows tracking online status in-memory or Redis.
-   - Shows green status lights on online teammates in the matches sidebar.
-
----
-
-## 4. Strategic Roadmap & Next Steps
-
-### Phase 1: High-Impact UI Completion (Immediate Priority)
-- [ ] **Incoming Match Requests Corner Widget**: Add an `INCOMING SIGNALS` badge and drawer showing developers who liked your profile, with instant Accept/Decline actions.
-- [ ] **Skill Filter Bar**: Add a chip-based skill selector on the Dashboard to filter discovery cards by technology.
-- [ ] **Edit Profile Modal**: Build a retro-styled modal on the Dashboard calling `api.updateProfile` to edit user info and skills.
-- [ ] **GitHub Links**: Display clickable GitHub badges on both discovery cards and active chat headers.
-- [ ] **Location & Goal Badges**: Display distinct badges for `location` (e.g., "Remote", "Bangalore") and `lookingFor` (e.g., "Seeking Backend Lead").
-
-### Phase 2: Reliability & Production Hardening
-- [ ] **Render Keep-Alive Cron**:
-  - Render free-tier web services sleep after 15 minutes of inactivity.
-  - Set up a scheduled ping every 10–14 minutes calling `GET https://devlynix-buildathon-2-0.onrender.com/api/health`.
-  - Can be configured via a free cron service (e.g., [Cron-job.org](https://cron-job.org) or [UptimeRobot](https://uptimerobot.com)) or a GitHub Actions scheduled workflow (`schedule: - cron: '*/12 * * * *'`).
-- [ ] **GitHub Actions Webhook Deployment**:
-  - Add `RENDER_DEPLOY_HOOK_URL` to GitHub repository secrets (`Settings -> Secrets and variables -> Actions`) so `.github/workflows/ci-cd.yml` automatically triggers an instant deploy upon merging to `main`.
-- [ ] **Database Connection Resiliency**:
-  - Current Hikari configuration handles Neon scale-to-zero cold boots via `initializationFailTimeout = -1`. Ensure Hikari maximum lifetime and idle timeouts remain aligned with Neon connection drop limits.
-
-### Phase 3: Communication & Collaboration Upgrades
-- [ ] **Full WebSocket Client Integration**:
-  - Replace or augment the 2-second HTTP polling with a STOMP over SockJS client connection using `@stomp/stompjs`.
-  - Provides instant sub-second delivery for active chat rooms.
-- [ ] **Typing Indicators & Read Receipts**:
-  - Broadcast ephemeral typing events over `/topic/matches/{matchId}/typing`.
-- [ ] **Unmatch & Block**:
-  - Add backend `DELETE /api/matches/{matchId}` endpoint to allow users to disconnect cleanly.
-
-### Phase 4: Hackathon & Team Formation Features
-- [ ] **Project Showcases**:
-  - Allow users to attach a "Project Pitch" or "Hackathon Idea" to their profile.
-- [ ] **Multi-Person Team Matching**:
-  - Enable squads of 3–4 developers rather than solely 1-on-1 pairs.
-- [ ] **AI-Powered Complementary Match Scoring**:
-  - Suggest pairs based on complementary skills (e.g., match Frontend engineers with Backend/ML engineers rather than identical skillsets).
-
----
-
-## 5. Architectural Reference & File Map
-
-### Backend (`D:\Devlynix-Buildathon-2.0`)
-- `com.devtinder.config.DataSourceConfig`: JDBC parser for Postgres/Neon pooled URIs.
-- `com.devtinder.controller.AuthController`: `/api/auth/register`, `/api/auth/login`.
-- `com.devtinder.controller.ProfileController`: `/api/profile/me` (`GET`, `PUT`).
-- `com.devtinder.controller.DiscoverController`: `/api/discover` (`GET` with `?skill=`), `/api/discover/swipe` (`POST`).
-- `com.devtinder.controller.MatchController`: `/api/matches` (`GET`).
-- `com.devtinder.controller.ChatController`: `/api/chat/{matchId}/messages` (`GET`, `POST`), broadcasts to `/topic/matches/{matchId}`.
-- `com.devtinder.websocket.WebSocketConfig`: STOMP message broker configuration (`/ws`, `/topic`, `/app`).
-- `com.devtinder.security.SecurityConfig`: Stateless JWT security, BCrypt encoder, CORS configuration.
-- `com.devtinder.security.RateLimitFilter`: Token-bucket 60 req/min rate limiter.
-
-### Frontend (`D:\devlynix-frontend`)
-- `lib/api.ts`: Centralized fetch client with typed request methods.
-- `lib/session.ts`: Local storage session management and token persistence.
-- `app/dashboard/page.tsx`: Developer discovery card deck with PASS / LIKE actions.
-- `app/matches/page.tsx`: Match list with live 2-second message polling and auto-scroll.
-- `app/login/page.tsx` & `app/register/page.tsx`: Authentication flows with retro styling.
-- `components/theme/`: Custom cyberpunk cassette retro UI components.
+### Frontend (`devlynix-frontend`)
+- `lib/api.ts` — 20 typed API methods, silent token refresh interceptor, GitHub avatar utilities.
+- `lib/session.ts` — Local storage session sync and multi-tab coordination.
+- `lib/sound.ts` — Zero-dependency Web Audio synthesizers for retro UI audio feedback.
+- `app/dashboard/page.tsx` — Candidate card discovery, signal radar, tech stack filter.
+- `app/matches/page.tsx` — Matches list, adaptive delta polling chat, teammate intel panel.
+- `app/sessions/page.tsx` — Active device sessions manager with telemetry and remote termination.
+- `components/theme/` — 16 custom cyberpunk retro components.

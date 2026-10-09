@@ -103,6 +103,11 @@ public class AuthService {
         refreshTokenService.revokeToken(rawRefreshToken);
     }
 
+    @Transactional
+    public void logoutUser(String email) {
+        userRepository.findByEmail(normalizeEmail(email)).ifPresent(refreshTokenService::revokeAllUserTokens);
+    }
+
     @Transactional(readOnly = true)
     public List<SessionResponse> getSessions(String email, String currentRefreshToken) {
         User user = userRepository.findByEmail(normalizeEmail(email))
@@ -115,6 +120,13 @@ public class AuthService {
         User user = userRepository.findByEmail(normalizeEmail(email))
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
         refreshTokenService.terminateSession(user, sessionId);
+    }
+
+    @Transactional
+    public void terminateOtherSessions(String email, String currentRefreshToken) {
+        User user = userRepository.findByEmail(normalizeEmail(email))
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+        refreshTokenService.terminateOtherSessions(user, currentRefreshToken);
     }
 
     private Set<Skill> resolveSkills(List<String> skillNames) {

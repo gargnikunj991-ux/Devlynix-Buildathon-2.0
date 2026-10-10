@@ -41,6 +41,19 @@ public class JwtService {
         return extractAllClaims(token).getSubject();
     }
 
+    public String extractUsernameEvenIfExpired(String token) {
+        if (token == null || token.isBlank()) {
+            return null;
+        }
+        try {
+            return extractUsername(token);
+        } catch (io.jsonwebtoken.ExpiredJwtException e) {
+            return e.getClaims().getSubject();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     public boolean isTokenValid(String token, UserDetails userDetails) {
         String username = extractUsername(token);
         return username.equals(userDetails.getUsername()) && !isExpired(token);

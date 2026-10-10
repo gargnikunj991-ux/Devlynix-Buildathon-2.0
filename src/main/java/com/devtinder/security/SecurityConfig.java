@@ -26,17 +26,20 @@ public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final RateLimitFilter rateLimitFilter;
+    private final CorrelationIdFilter correlationIdFilter;
     private final UserDetailsService userDetailsService;
     private final List<String> allowedOrigins;
 
     public SecurityConfig(
             JwtAuthenticationFilter jwtAuthenticationFilter,
             RateLimitFilter rateLimitFilter,
+            CorrelationIdFilter correlationIdFilter,
             UserDetailsService userDetailsService,
             @Value("${app.cors.allowed-origins:http://localhost:3000}") String allowedOrigins
     ) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
         this.rateLimitFilter = rateLimitFilter;
+        this.correlationIdFilter = correlationIdFilter;
         this.userDetailsService = userDetailsService;
         this.allowedOrigins = Arrays.stream(allowedOrigins.split(","))
                 .map(String::trim)
@@ -52,10 +55,11 @@ public class SecurityConfig {
                 .headers(headers -> headers.frameOptions(frameOptions -> frameOptions.sameOrigin()))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/", "/api/health", "/api/auth/**", "/h2-console/**", "/ws/**").permitAll()
+                        .requestMatchers("/", "/api/health", "/api/auth/**", "/h2-console/**", "/ws/**", "/api/presence").permitAll()
                         .anyRequest().authenticated()
                 )
                 .authenticationProvider(authenticationProvider())
+                .addFilterBefore(correlationIdFilter, org.springframework.security.web.header.HeaderWriterFilter.class)
                 .addFilterBefore(rateLimitFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .build();

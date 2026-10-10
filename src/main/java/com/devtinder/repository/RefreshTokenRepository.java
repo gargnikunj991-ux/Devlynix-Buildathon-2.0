@@ -27,19 +27,31 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshToken, Long
     @Query("update RefreshToken r set r.revoked = true, r.revokedAt = :now where r.user.id = :userId and r.revoked = false")
     void revokeAllUserTokens(@Param("userId") Long userId, @Param("now") Instant now);
 
-    @Modifying
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("delete from RefreshToken r where r.token = :token")
     void deleteByToken(@Param("token") String token);
 
-    @Modifying
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("delete from RefreshToken r where r.familyId = :familyId")
     void deleteByFamilyId(@Param("familyId") String familyId);
 
-    @Modifying
-    @Query("delete from RefreshToken r where r.expiryDate < :now or (r.revoked = true and r.revokedAt < :cutoff)")
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("delete from RefreshToken r where r.user.id = :userId")
+    void deleteByUserId(@Param("userId") Long userId);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("delete from RefreshToken r where r.user.id = :userId and r.familyId != :currentFamilyId")
+    void deleteOtherFamiliesByUserId(@Param("userId") Long userId, @Param("currentFamilyId") String currentFamilyId);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("delete from RefreshToken r where r.expiryDate < :now or r.revoked = true")
+    int purgeAllRevokedOrExpiredTokens(@Param("now") Instant now);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("delete from RefreshToken r where r.expiryDate < :now or (r.revoked = true and (r.revokedAt is null or r.revokedAt < :cutoff))")
     int purgeOldTokens(@Param("now") Instant now, @Param("cutoff") Instant cutoff);
 
-    @Modifying
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("delete from RefreshToken r where r.id = :id and r.user.id = :userId")
     int deleteByIdAndUserId(@Param("id") Long id, @Param("userId") Long userId);
 }

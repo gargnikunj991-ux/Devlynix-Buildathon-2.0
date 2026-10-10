@@ -65,21 +65,32 @@ public class RefreshTokenService {
             throw new IllegalArgumentException("Refresh token is missing");
         }
 
-        RefreshToken token = refreshTokenRepository.findByToken(rawToken)
+        RefreshToken token = refreshTokenRepository.findByToken(rawToken.trim())
                 .orElseThrow(() -> new IllegalArgumentException("Invalid refresh token"));
 
-        // Hacker race condition / Replay attack detection:
-        // If a previously revoked/spent token is submitted again, someone compromised the token!
+        // RTR Grace Period and Hacker Theft / Replay attack detection:
         if (token.isRevoked()) {
-            log.warn("SECURITY ALERT: Spent refresh token re-submitted for family [{}]. Revoking entire token family.", token.getFamilyId());
-            refreshTokenRepository.revokeFamily(token.getFamilyId(), Instant.now());
+            Instant revokedAt = token.getRevokedAt();
+            // Allow 30 seconds grace period for network latency / concurrent browser requests
+            if (revokedAt != null
+                    && Duration.between(revokedAt, Instant.now()).getSeconds() < 30
+                    && token.getReplacedByToken() != null) {
+                RefreshToken replacement = refreshTokenRepository.findByToken(token.getReplacedByToken())
+                        .orElse(null);
+                if (replacement != null && !replacement.isRevoked() && replacement.getExpiryDate().isAfter(Instant.now())) {
+                    log.info("Concurrent refresh within 30s grace period for family [{}]. Returning active replacement token.", token.getFamilyId());
+                    return new RotationResult(replacement.getUser(), replacement.getToken());
+                }
+            }
+
+            // Outside grace period: genuine replay attack! Destroy family to defend user
+            log.warn("SECURITY ALERT: Spent refresh token re-submitted outside grace period for family [{}]. Deleting compromised token family.", token.getFamilyId());
+            refreshTokenRepository.deleteByFamilyId(token.getFamilyId());
             throw new IllegalArgumentException("Security compromise detected. All sessions in this lineage have been revoked.");
         }
 
         if (token.getExpiryDate().isBefore(Instant.now())) {
-            token.setRevoked(true);
-            token.setRevokedAt(Instant.now());
-            refreshTokenRepository.save(token);
+            refreshTokenRepository.deleteByFamilyId(token.getFamilyId());
             throw new IllegalArgumentException("Refresh token has expired. Please log in again.");
         }
 
@@ -108,22 +119,34 @@ public class RefreshTokenService {
     }
 
     @Transactional
-    public void revokeToken(String rawToken) {
+    public void deleteTokenSession(String rawToken) {
         if (rawToken == null || rawToken.isBlank()) {
             return;
         }
         refreshTokenRepository.findByToken(rawToken.trim()).ifPresentOrElse(t -> {
-            refreshTokenRepository.revokeFamily(t.getFamilyId(), Instant.now());
-            log.info("Revoked session family [{}] on logout for user [{}]", t.getFamilyId(), t.getUser().getEmail());
+            String familyId = t.getFamilyId();
+            refreshTokenRepository.deleteByFamilyId(familyId);
+            log.info("Deleted refresh token session family [{}] on logout for user [{}]", familyId, t.getUser().getEmail());
         }, () -> {
-            log.warn("Logout requested for refresh token that was not found in database: [{}]", rawToken);
+            refreshTokenRepository.deleteByToken(rawToken.trim());
+            log.info("Deleted refresh token directly on logout: [{}]", rawToken);
         });
     }
 
     @Transactional
+    public void revokeToken(String rawToken) {
+        deleteTokenSession(rawToken);
+    }
+
+    @Transactional
+    public void deleteAllUserTokens(User user) {
+        refreshTokenRepository.deleteByUserId(user.getId());
+        log.info("Deleted all active refresh tokens for user [{}]", user.getEmail());
+    }
+
+    @Transactional
     public void revokeAllUserTokens(User user) {
-        refreshTokenRepository.revokeAllUserTokens(user.getId(), Instant.now());
-        log.info("Revoked all active refresh tokens for user [{}]", user.getEmail());
+        deleteAllUserTokens(user);
     }
 
     @Transactional(readOnly = true)
@@ -145,8 +168,8 @@ public class RefreshTokenService {
     public void terminateSession(User user, Long sessionId) {
         refreshTokenRepository.findById(sessionId).ifPresent(t -> {
             if (t.getUser().getId().equals(user.getId())) {
-                refreshTokenRepository.revokeFamily(t.getFamilyId(), Instant.now());
-                log.info("User [{}] revoked session family [{}]", user.getEmail(), t.getFamilyId());
+                refreshTokenRepository.deleteByFamilyId(t.getFamilyId());
+                log.info("User [{}] deleted session family [{}]", user.getEmail(), t.getFamilyId());
             }
         });
     }
@@ -158,21 +181,39 @@ public class RefreshTokenService {
         }
         refreshTokenRepository.findByToken(currentRefreshToken.trim()).ifPresent(currentToken -> {
             String currentFamilyId = currentToken.getFamilyId();
-            List<RefreshToken> allTokens = refreshTokenRepository.findByUserAndRevokedFalseOrderByLastActiveDesc(user);
-            for (RefreshToken t : allTokens) {
-                if (!t.getFamilyId().equals(currentFamilyId)) {
-                    refreshTokenRepository.revokeFamily(t.getFamilyId(), Instant.now());
-                }
-            }
-            log.info("User [{}] revoked all other session families except [{}]", user.getEmail(), currentFamilyId);
+            refreshTokenRepository.deleteOtherFamiliesByUserId(user.getId(), currentFamilyId);
+            log.info("User [{}] deleted all other session families except [{}]", user.getEmail(), currentFamilyId);
         });
     }
 
-    @Scheduled(fixedRate = 3600000) // Hourly background cleanup
+    @Transactional
+    public int purgeAllRevokedAndExpiredTokens() {
+        Instant now = Instant.now();
+        int deleted = refreshTokenRepository.purgeAllRevokedOrExpiredTokens(now);
+        if (deleted > 0) {
+            log.info("Purged {} revoked/expired refresh tokens from database", deleted);
+        }
+        return deleted;
+    }
+
+    @org.springframework.context.event.EventListener(org.springframework.boot.context.event.ApplicationReadyEvent.class)
+    @Transactional
+    public void onStartupCleanup() {
+        try {
+            int purged = purgeAllRevokedAndExpiredTokens();
+            if (purged > 0) {
+                log.info("Startup cleanup completed: purged {} revoked/expired tokens from database", purged);
+            }
+        } catch (Exception e) {
+            log.warn("Startup cleanup encountered error: {}", e.getMessage());
+        }
+    }
+
+    @Scheduled(fixedRate = 300000, initialDelay = 10000) // Runs 10s after startup, then every 5 minutes
     @Transactional
     public void purgeExpiredAndStaleTokens() {
         Instant now = Instant.now();
-        Instant cutoff = now.minus(Duration.ofHours(24)); // Retain revoked tokens for 24h to detect replay attacks
+        Instant cutoff = now.minus(Duration.ofMinutes(1)); // Allow 1-minute grace period for rotated tokens
         int deleted = refreshTokenRepository.purgeOldTokens(now, cutoff);
         if (deleted > 0) {
             log.info("Automated cleanup: purged {} expired/stale refresh tokens from database", deleted);

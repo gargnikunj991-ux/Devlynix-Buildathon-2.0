@@ -28,39 +28,83 @@ public final class UserAgentUtil {
         }
         String userAgent = request.getHeader("User-Agent");
         if (userAgent == null || userAgent.isBlank()) {
-            return "Web Client";
+            return "Web Browser";
         }
 
-        String os = "Unknown OS";
-        if (userAgent.contains("Windows NT 10.0")) {
-            os = "Windows 10/11";
-        } else if (userAgent.contains("Windows")) {
-            os = "Windows";
-        } else if (userAgent.contains("Macintosh") || userAgent.contains("Mac OS X")) {
-            os = "macOS";
-        } else if (userAgent.contains("iPhone")) {
-            os = "iOS (iPhone)";
+        // 1. Identify Operating System & Hardware Device
+        String os = "Desktop PC";
+        if (userAgent.contains("iPhone")) {
+            os = "Apple iPhone";
         } else if (userAgent.contains("iPad")) {
-            os = "iOS (iPad)";
+            os = "Apple iPad";
+        } else if (userAgent.contains("Macintosh") || userAgent.contains("Mac OS X")) {
+            os = "Apple Mac (macOS)";
+        } else if (userAgent.contains("Windows NT 10.0") || userAgent.contains("Windows NT 11.0")) {
+            os = "Windows 11 / 10 PC";
+        } else if (userAgent.contains("Windows NT 6.3")) {
+            os = "Windows 8.1 PC";
+        } else if (userAgent.contains("Windows NT 6.1")) {
+            os = "Windows 7 PC";
+        } else if (userAgent.contains("Windows")) {
+            os = "Windows PC";
         } else if (userAgent.contains("Android")) {
-            os = "Android";
+            if (userAgent.contains("SM-") || userAgent.contains("Samsung")) {
+                os = "Samsung Galaxy (Android)";
+            } else if (userAgent.contains("Pixel")) {
+                os = "Google Pixel (Android)";
+            } else if (userAgent.contains("OnePlus")) {
+                os = "OnePlus (Android)";
+            } else if (userAgent.contains("Xiaomi") || userAgent.contains("Redmi") || userAgent.contains("POCO")) {
+                os = "Xiaomi / Redmi (Android)";
+            } else if (userAgent.contains("Tablet")) {
+                os = "Android Tablet";
+            } else {
+                os = "Android Phone";
+            }
+        } else if (userAgent.contains("CrOS")) {
+            os = "Chromebook (ChromeOS)";
+        } else if (userAgent.contains("Ubuntu")) {
+            os = "Ubuntu Linux";
+        } else if (userAgent.contains("Fedora")) {
+            os = "Fedora Linux";
+        } else if (userAgent.contains("Debian")) {
+            os = "Debian Linux";
         } else if (userAgent.contains("Linux")) {
-            os = "Linux";
+            os = "Linux PC";
+        } else if (userAgent.contains("Mobile")) {
+            os = "Mobile Device";
         }
 
-        String browser = "Browser";
-        if (userAgent.contains("Edg/")) {
-            browser = "Edge";
-        } else if (userAgent.contains("Chrome/") && !userAgent.contains("Edg/")) {
-            browser = "Chrome";
-        } else if (userAgent.contains("Firefox/")) {
-            browser = "Firefox";
+        // 2. Identify Web Browser / Client
+        String browser = "Web Browser";
+        if (userAgent.contains("PostmanRuntime")) {
+            return "Postman API Client (" + os + ")";
+        } else if (userAgent.startsWith("curl/")) {
+            return "cURL Developer Tool (" + os + ")";
+        } else if (userAgent.contains("Insomnia")) {
+            return "Insomnia REST Client (" + os + ")";
+        } else if (userAgent.contains("Arc/")) {
+            browser = "Arc Browser";
+        } else if (userAgent.contains("Brave/")) {
+            browser = "Brave Browser";
+        } else if (userAgent.contains("OPR/") || userAgent.contains("Opera/")) {
+            browser = "Opera";
+        } else if (userAgent.contains("Edg/") || userAgent.contains("Edge/") || userAgent.contains("EdgiOS/") || userAgent.contains("EdgA/")) {
+            browser = "Microsoft Edge";
+        } else if (userAgent.contains("SamsungBrowser/")) {
+            browser = "Samsung Internet";
+        } else if (userAgent.contains("Vivaldi/")) {
+            browser = "Vivaldi";
+        } else if (userAgent.contains("DuckDuckGo/")) {
+            browser = "DuckDuckGo Browser";
+        } else if (userAgent.contains("Firefox/") || userAgent.contains("FxiOS/")) {
+            browser = "Mozilla Firefox";
+        } else if (userAgent.contains("CriOS/")) {
+            browser = "Google Chrome (iOS)";
+        } else if (userAgent.contains("Chrome/")) {
+            browser = "Google Chrome";
         } else if (userAgent.contains("Safari/") && !userAgent.contains("Chrome/")) {
-            browser = "Safari";
-        } else if (userAgent.contains("PostmanRuntime")) {
-            browser = "Postman";
-        } else if (userAgent.contains("curl")) {
-            browser = "cURL";
+            browser = "Apple Safari";
         }
 
         return browser + " on " + os;

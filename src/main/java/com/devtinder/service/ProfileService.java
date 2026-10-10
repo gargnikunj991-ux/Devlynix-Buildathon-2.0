@@ -35,22 +35,22 @@ public class ProfileService {
         User user = findByEmail(email);
 
         if (request.name() != null && !request.name().isBlank()) {
-            user.setName(request.name().trim());
+            user.setName(com.devtinder.security.SanitizationUtil.sanitizeText(request.name()));
         }
         if (request.githubUrl() != null) {
             user.setGithubUrl(blankToNull(request.githubUrl()));
         }
         if (request.bio() != null) {
-            user.setBio(blankToNull(request.bio()));
+            user.setBio(blankToNull(com.devtinder.security.SanitizationUtil.sanitizeText(request.bio())));
         }
         if (request.lookingFor() != null) {
-            user.setLookingFor(blankToNull(request.lookingFor()));
+            user.setLookingFor(blankToNull(com.devtinder.security.SanitizationUtil.sanitizeText(request.lookingFor())));
         }
         if (request.location() != null) {
-            user.setLocation(blankToNull(request.location()));
+            user.setLocation(blankToNull(com.devtinder.security.SanitizationUtil.sanitizeText(request.location())));
         }
         if (request.projectPitch() != null) {
-            user.setProjectPitch(blankToNull(request.projectPitch()));
+            user.setProjectPitch(blankToNull(com.devtinder.security.SanitizationUtil.sanitizeText(request.projectPitch())));
         }
         if (request.skills() != null) {
             user.setSkills(resolveSkills(request.skills()));

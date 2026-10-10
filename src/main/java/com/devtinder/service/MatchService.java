@@ -21,17 +21,20 @@ public class MatchService {
     private final SwipeRepository swipeRepository;
     private final UserRepository userRepository;
     private final MessageRepository messageRepository;
+    private final org.springframework.messaging.simp.SimpMessagingTemplate messagingTemplate;
 
     public MatchService(
             MatchRepository matchRepository,
             SwipeRepository swipeRepository,
             UserRepository userRepository,
-            MessageRepository messageRepository
+            MessageRepository messageRepository,
+            @org.springframework.beans.factory.annotation.Autowired(required = false) org.springframework.messaging.simp.SimpMessagingTemplate messagingTemplate
     ) {
         this.matchRepository = matchRepository;
         this.swipeRepository = swipeRepository;
         this.userRepository = userRepository;
         this.messageRepository = messageRepository;
+        this.messagingTemplate = messagingTemplate;
     }
 
     @Transactional
@@ -62,6 +65,25 @@ public class MatchService {
 
         Match match = matchRepository.findBetweenUsers(swiper.getId(), target.getId())
                 .orElseGet(() -> matchRepository.save(new Match(swiper, target)));
+
+        if (messagingTemplate != null) {
+            try {
+                var notificationForTarget = java.util.Map.of(
+                        "type", "MUTUAL_MATCH",
+                        "matchId", match.getId(),
+                        "partner", ProfileResponse.from(swiper)
+                );
+                messagingTemplate.convertAndSend("/topic/user/" + target.getId() + "/notifications", notificationForTarget);
+
+                var notificationForSwiper = java.util.Map.of(
+                        "type", "MUTUAL_MATCH",
+                        "matchId", match.getId(),
+                        "partner", ProfileResponse.from(target)
+                );
+                messagingTemplate.convertAndSend("/topic/user/" + swiper.getId() + "/notifications", notificationForSwiper);
+            } catch (Exception ignored) {
+            }
+        }
 
         return toResponse(match, swiper);
     }

@@ -28,9 +28,11 @@ import java.util.List;
 public class AuthController {
 
     private final AuthService authService;
+    private final com.devtinder.security.JwtService jwtService;
 
-    public AuthController(AuthService authService) {
+    public AuthController(AuthService authService, com.devtinder.security.JwtService jwtService) {
         this.authService = authService;
+        this.jwtService = jwtService;
     }
 
     @PostMapping("/register")
@@ -66,17 +68,32 @@ public class AuthController {
     public void logout(
             @RequestBody(required = false) RefreshRequest request,
             @RequestHeader(value = "X-Refresh-Token", required = false) String headerToken,
-            @AuthenticationPrincipal UserDetails userDetails
+            @AuthenticationPrincipal UserDetails userDetails,
+            HttpServletRequest httpRequest
     ) {
         String token = request != null && request.refreshToken() != null && !request.refreshToken().isBlank()
                 ? request.refreshToken()
                 : headerToken;
 
-        if (token != null && !token.isBlank()) {
-            authService.logout(token.trim());
-        } else if (userDetails != null) {
-            authService.logoutUser(userDetails.getUsername());
+        String email = userDetails != null ? userDetails.getUsername() : null;
+        if (email == null) {
+            String authHeader = httpRequest.getHeader("Authorization");
+            if (authHeader != null && authHeader.startsWith("Bearer ")) {
+                email = jwtService.extractUsernameEvenIfExpired(authHeader.substring(7));
+            }
         }
+
+        authService.logout(token != null ? token.trim() : null, email);
+    }
+
+    @PostMapping("/cleanup")
+    public java.util.Map<String, Object> cleanup() {
+        int purged = authService.cleanupTokens();
+        return java.util.Map.of(
+                "status", "ok",
+                "purgedCount", purged,
+                "timestamp", java.time.Instant.now().toString()
+        );
     }
 
     @GetMapping("/sessions")

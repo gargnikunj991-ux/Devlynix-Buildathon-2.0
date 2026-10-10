@@ -79,7 +79,12 @@ public class ChatService {
         User sender = findByEmail(email);
         Match match = matchService.getMatchForUser(matchId, sender);
 
-        Message saved = messageRepository.save(new Message(match, sender, content.trim()));
+        String cleanContent = com.devtinder.security.SanitizationUtil.sanitizeText(content);
+        if (cleanContent.isBlank()) {
+            throw new IllegalArgumentException("Message content cannot be blank");
+        }
+
+        Message saved = messageRepository.save(new Message(match, sender, cleanContent));
         return MessageResponse.from(saved);
     }
 

@@ -28,8 +28,7 @@ public class ProfileController {
         return profileService.getProfile(userDetails.getUsername());
     }
 
-    @PatchMapping("/me")
-    @PutMapping("/me")
+    @RequestMapping(value = "/me", method = {org.springframework.web.bind.annotation.RequestMethod.PATCH, org.springframework.web.bind.annotation.RequestMethod.PUT})
     public ProfileResponse update(
             @AuthenticationPrincipal UserDetails userDetails,
             @Valid @RequestBody UpdateProfileRequest request

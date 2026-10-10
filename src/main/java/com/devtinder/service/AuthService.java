@@ -99,13 +99,30 @@ public class AuthService {
     }
 
     @Transactional
+    public void logout(String rawRefreshToken, String userEmail) {
+        if (rawRefreshToken != null && !rawRefreshToken.isBlank()) {
+            refreshTokenService.deleteTokenSession(rawRefreshToken.trim());
+        } else if (userEmail != null && !userEmail.isBlank()) {
+            userRepository.findByEmail(normalizeEmail(userEmail))
+                    .ifPresent(refreshTokenService::deleteAllUserTokens);
+        }
+        refreshTokenService.purgeAllRevokedAndExpiredTokens();
+    }
+
+    @Transactional
+    public int cleanupTokens() {
+        return refreshTokenService.purgeAllRevokedAndExpiredTokens();
+    }
+
+    @Transactional
     public void logout(String rawRefreshToken) {
-        refreshTokenService.revokeToken(rawRefreshToken);
+        logout(rawRefreshToken, null);
     }
 
     @Transactional
     public void logoutUser(String email) {
-        userRepository.findByEmail(normalizeEmail(email)).ifPresent(refreshTokenService::revokeAllUserTokens);
+        userRepository.findByEmail(normalizeEmail(email))
+                .ifPresent(refreshTokenService::deleteAllUserTokens);
     }
 
     @Transactional(readOnly = true)
